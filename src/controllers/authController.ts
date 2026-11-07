@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import prisma from "../config/prisma.js";
+import jwt from "jsonwebtoken";
 
 export const registerUser = async (req: Request, res: Response) => {
   try {
@@ -80,3 +81,77 @@ if (!emailRegex.test(email)) {
     });
   }
 };
+
+
+
+export const loginUser=async(req:Request,res:Response)=>{
+  try{
+const {email,password}=req.body ?? {};
+if(!email){
+  return res.status(400).json({
+    message:"Email is required",
+  });
+}
+
+if(!password){
+  return res.status(400).json({
+    message:"Password is required",
+  });
+}
+
+const user=await prisma.user.findFirst({
+  where:{email,}
+});
+
+if(!user){
+  return res.status(401).json({
+    message:"invalid email or password",
+  });
+}
+
+const isPasswordValid=await bcrypt.compare(
+  password,
+  user.password
+);
+if(!isPasswordValid){
+  return res.status(401).json({
+    message:"invalid email or password",
+  });
+}
+
+
+
+   const token=jwt.sign(
+    {
+      userId:user.id,
+      role:user.role,
+    },
+    process.env.JWT_SECRET!,
+    {
+      expiresIn:"1h",
+    }
+   );
+
+
+      return res.status(200).json({
+      message: "Login successful",
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
+    });
+
+  }
+
+  catch(error){
+     console.error(error);
+
+    return res.status(500).json({
+      message: "Something went wrong during login",
+    });
+  }
+
+  };
