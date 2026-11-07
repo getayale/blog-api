@@ -7,11 +7,20 @@ import { authenticateToken } from "./middleware/authMiddleware.js";
 import { authorizeRole } from "./middleware/authorizeMiddleware.js";
 import postsRouter from "./routes/postsRouter.js";
 import commentsRouter from "./routes/commentsRouter.js";
+import adminRouter from "./routes/adminRoutes.js";
+import cookieParser from "cookie-parser";
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: "http://localhost:4200",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+  allowedHeaders: ["Content-Type"]
+}));
+
 app.use(express.json());
+app.use(cookieParser());
 
 app.use("/api/auth", authRouter);
 
@@ -59,5 +68,5 @@ app.get(
 
 app.use("/api/posts", postsRouter);
 app.use("/api/comments", commentsRouter);
-
+app.use("/api/admin", adminRouter);
 export default app;

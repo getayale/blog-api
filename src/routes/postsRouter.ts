@@ -4,11 +4,11 @@ import { authenticateToken } from "../middleware/authMiddleware.js";
 import { authorizeRole } from "../middleware/authorizeMiddleware.js";
 const postsRouter=Router();
 
-postsRouter.post("/",authenticateToken,authorizeRole("AUTHOR"),createPost);
+postsRouter.post("/",authenticateToken,authorizeRole("AUTHOR", "ADMIN"),createPost);
 postsRouter.get("/",getPublishedPosts);
 postsRouter.get("/:id", getPostById);
-postsRouter.put("/:id",authenticateToken,authorizeRole("AUTHOR"),updatePost);
-postsRouter.delete("/:id",authenticateToken,authorizeRole("AUTHOR"),deletePost);
-postsRouter.patch("/:id/publish",authenticateToken,authorizeRole("AUTHOR"),updatePostPublishStatus);
+postsRouter.put("/:id",authenticateToken,authorizeRole("AUTHOR", "ADMIN"),updatePost);
+postsRouter.delete("/:id",authenticateToken,authorizeRole("AUTHOR", "ADMIN"),deletePost);
+postsRouter.patch("/:id/publish",authenticateToken,authorizeRole("AUTHOR", "ADMIN"),updatePostPublishStatus);
 
 export default postsRouter;

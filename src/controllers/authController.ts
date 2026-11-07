@@ -84,58 +84,64 @@ if (!emailRegex.test(email)) {
 
 
 
-export const loginUser=async(req:Request,res:Response)=>{
-  try{
-const {email,password}=req.body ?? {};
-if(!email){
-  return res.status(400).json({
-    message:"Email is required",
-  });
-}
+export const loginUser = async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body ?? {};
 
-if(!password){
-  return res.status(400).json({
-    message:"Password is required",
-  });
-}
-
-const user=await prisma.user.findFirst({
-  where:{email,}
-});
-
-if(!user){
-  return res.status(401).json({
-    message:"invalid email or password",
-  });
-}
-
-const isPasswordValid=await bcrypt.compare(
-  password,
-  user.password
-);
-if(!isPasswordValid){
-  return res.status(401).json({
-    message:"invalid email or password",
-  });
-}
-
-
-
-   const token=jwt.sign(
-    {
-      userId:user.id,
-      role:user.role,
-    },
-    process.env.JWT_SECRET!,
-    {
-      expiresIn:"1h",
+    if (!email) {
+      return res.status(400).json({
+        message: "Email is required",
+      });
     }
-   );
 
+    if (!password) {
+      return res.status(400).json({
+        message: "Password is required",
+      });
+    }
 
-      return res.status(200).json({
+    const user = await prisma.user.findFirst({
+      where: { email },
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        message: "Invalid email or password",
+      });
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      user.password
+    );
+
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        message: "Invalid email or password",
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        role: user.role,
+      },
+      process.env.JWT_SECRET!,
+      {
+        expiresIn: "1h",
+      }
+    );
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 1000,
+      path: "/",
+    });
+
+    return res.status(200).json({
       message: "Login successful",
-      token,
       user: {
         id: user.id,
         username: user.username,
@@ -144,14 +150,25 @@ if(!isPasswordValid){
       },
     });
 
-  }
-
-  catch(error){
-     console.error(error);
+  } catch (error) {
+    console.error(error);
 
     return res.status(500).json({
       message: "Something went wrong during login",
     });
   }
+};
 
-  };
+
+export const logoutUser = (req: Request, res: Response) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+  });
+
+  return res.status(200).json({
+    message: "Logout successful",
+  });
+};
