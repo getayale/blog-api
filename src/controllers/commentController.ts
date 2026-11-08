@@ -74,13 +74,6 @@ export const getComments = async (req: Request, res: Response) => {
       where: {
         id: postId,
       },
-        include: {
-    author: {
-      select: {
-        username: true,
-      },
-    },
-  },
     });
 
     if (!post || !post.published) {
@@ -92,6 +85,13 @@ export const getComments = async (req: Request, res: Response) => {
     const comments = await prisma.comment.findMany({
       where: {
         postId,
+      },
+      include: {
+        author: {
+          select: {
+            username: true,
+          },
+        },
       },
       orderBy: {
         createdAt: "desc",
