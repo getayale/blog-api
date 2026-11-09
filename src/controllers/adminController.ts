@@ -556,4 +556,53 @@ if (typeof id !== "string") {
       message: "Unable to delete comment",
     });
   }
+
+  
+
+
+  
+};
+
+// GET ADMIN DASHBOARD STATISTICS
+export const getDashboardStats = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const [
+      totalUsers,
+      totalAuthors,
+      totalReaders,
+      totalPosts
+    ] = await Promise.all([
+      prisma.user.count(),
+
+      prisma.user.count({
+        where: { role: "AUTHOR" }
+      }),
+
+      prisma.user.count({
+        where: { role: "READER" }
+      }),
+
+      prisma.post.count()
+    ]);
+
+    return res.status(200).json({
+      message: "Dashboard statistics retrieved successfully",
+      stats: {
+        totalUsers,
+        totalAuthors,
+        totalReaders,
+        totalPosts
+      }
+    });
+
+  } catch (error) {
+    console.error("Dashboard statistics error:", error);
+
+    return res.status(500).json({
+      message: "Unable to retrieve dashboard statistics"
+    });
+  }
 };

@@ -10,6 +10,7 @@ import {
   deleteAnyPost,
   getAllComments,
   deleteAnyComment,
+  getDashboardStats,
 } from "../controllers/adminController.js";
 
 import { authenticateToken } from "../middleware/authMiddleware.js";
@@ -34,5 +35,7 @@ router.delete("/posts/:id", deleteAnyPost);
 // COMMENT MANAGEMENT
 router.get("/comments", getAllComments);
 router.delete("/comments/:id", deleteAnyComment);
+// DASHBOARD STATISTICS
+router.get("/stats", getDashboardStats);
 
 export default router;

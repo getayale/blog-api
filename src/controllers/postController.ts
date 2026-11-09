@@ -325,3 +325,76 @@ export const updatePostPublishStatus = async (req: Request,res: Response) => {
     });
   }
 };
+
+
+export const getMyPosts = async (req: Request, res: Response) => {
+  try {
+    const keyword =
+      typeof req.query.keyword === "string"
+        ? req.query.keyword.trim()
+        : "";
+
+    const page = Math.max(Number(req.query.page) || 1, 1);
+
+    const limit = Math.min(
+      Math.max(Number(req.query.limit) || 10, 1),
+      100
+    );
+
+    const skip = (page - 1) * limit;
+
+    const where = {
+      authorId: req.user!.userId,
+      ...(keyword
+        ? {
+            title: {
+              contains: keyword,
+              mode: "insensitive" as const,
+            },
+          }
+        : {}),
+    };
+
+    const [posts, totalPosts] = await Promise.all([
+      prisma.post.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: {
+          createdAt: "desc",
+        },
+        include: {
+          author: {
+            select: {
+              username: true,
+            },
+          },
+          _count: {
+            select: {
+              comments: true,
+            },
+          },
+        },
+      }),
+
+      prisma.post.count({ where }),
+    ]);
+
+    return res.status(200).json({
+      message: "Your posts retrieved successfully",
+      pagination: {
+        currentPage: page,
+        limit,
+        totalPosts,
+        totalPages: Math.ceil(totalPosts / limit),
+      },
+      posts,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Something went wrong while retrieving your posts",
+    });
+  }
+};
