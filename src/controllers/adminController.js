@@ -1,0 +1,516 @@
+import prisma from "../config/prisma.js";
+const validRoles = ["ADMIN", "AUTHOR", "READER"];
+const getPagination = (req) => {
+    const pageValue = Number(req.query.page);
+    const limitValue = Number(req.query.limit);
+    const page = Number.isInteger(pageValue) && pageValue > 0 ? pageValue : 1;
+    const limit = Number.isInteger(limitValue) && limitValue > 0
+        ? Math.min(limitValue, 100)
+        : 10;
+    return {
+        page,
+        limit,
+        skip: (page - 1) * limit,
+    };
+};
+const getKeyword = (req) => {
+    return typeof req.query.keyword === "string"
+        ? req.query.keyword.trim()
+        : "";
+};
+// GET ALL USERS
+export const getAllUsers = async (req, res) => {
+    try {
+        const { page, limit, skip } = getPagination(req);
+        const keyword = getKeyword(req);
+        const where = keyword
+            ? {
+                OR: [
+                    { username: { contains: keyword, mode: "insensitive" } },
+                    { email: { contains: keyword, mode: "insensitive" } },
+                ],
+            }
+            : {};
+        const [users, totalUsers] = await Promise.all([
+            prisma.user.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { createdAt: "desc" },
+                select: {
+                    id: true,
+                    username: true,
+                    email: true,
+                    role: true,
+                    createdAt: true,
+                },
+            }),
+            prisma.user.count({ where }),
+        ]);
+        return res.status(200).json({
+            message: "Users retrieved successfully",
+            pagination: {
+                currentPage: page,
+                limit,
+                totalUsers,
+                totalPages: Math.ceil(totalUsers / limit),
+            },
+            users,
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            message: "Unable to retrieve users",
+        });
+    }
+};
+// CHANGE USER ROLE
+export const changeUserRole = async (req, res) => {
+    try {
+        const id = req.params.id;
+        if (typeof id !== "string") {
+            return res.status(400).json({
+                message: "Invalid comment ID",
+            });
+        }
+        const { role } = req.body;
+        if (!validRoles.includes(role)) {
+            return res.status(400).json({
+                message: "Invalid role. Use ADMIN, AUTHOR, or READER",
+            });
+        }
+        if (!id) {
+            return res.status(400).json({
+                message: "User ID is required",
+            });
+        }
+        const user = await prisma.user.findUnique({
+            where: { id },
+        });
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found",
+            });
+        }
+        if (user.id === req.user?.userId && role !== "ADMIN") {
+            return res.status(400).json({
+                message: "You cannot remove your own admin role",
+            });
+        }
+        if (user.role === "ADMIN" && role !== "ADMIN") {
+            const adminCount = await prisma.user.count({
+                where: { role: "ADMIN" },
+            });
+            if (adminCount <= 1) {
+                return res.status(400).json({
+                    message: "You cannot remove the last admin",
+                });
+            }
+        }
+        const updatedUser = await prisma.user.update({
+            where: { id },
+            data: { role },
+            select: {
+                id: true,
+                username: true,
+                email: true,
+                role: true,
+            },
+        });
+        return res.status(200).json({
+            message: "User role updated successfully",
+            user: updatedUser,
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            message: "Unable to update user role",
+        });
+    }
+};
+// DELETE USER
+export const deleteUser = async (req, res) => {
+    try {
+        const id = req.params.id;
+        if (typeof id !== "string") {
+            return res.status(400).json({
+                message: "Invalid comment ID",
+            });
+        }
+        if (!id) {
+            return res.status(400).json({
+                message: "User ID is required",
+            });
+        }
+        if (id === req.user?.userId) {
+            return res.status(400).json({
+                message: "You cannot delete your own account",
+            });
+        }
+        const user = await prisma.user.findUnique({
+            where: { id },
+        });
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found",
+            });
+        }
+        if (user.role === "ADMIN") {
+            const adminCount = await prisma.user.count({
+                where: { role: "ADMIN" },
+            });
+            if (adminCount <= 1) {
+                return res.status(400).json({
+                    message: "You cannot delete the last admin",
+                });
+            }
+        }
+        await prisma.user.delete({
+            where: { id },
+        });
+        return res.status(200).json({
+            message: "User deleted successfully",
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            message: "Unable to delete user",
+        });
+    }
+};
+// GET ALL POSTS
+export const getAllPosts = async (req, res) => {
+    try {
+        const { page, limit, skip } = getPagination(req);
+        const keyword = getKeyword(req);
+        const where = keyword
+            ? {
+                OR: [
+                    { title: { contains: keyword, mode: "insensitive" } },
+                    { content: { contains: keyword, mode: "insensitive" } },
+                    {
+                        author: {
+                            username: {
+                                contains: keyword,
+                                mode: "insensitive",
+                            },
+                        },
+                    },
+                ],
+            }
+            : {};
+        const [posts, totalPosts] = await Promise.all([
+            prisma.post.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { createdAt: "desc" },
+                include: {
+                    author: {
+                        select: {
+                            id: true,
+                            username: true,
+                        },
+                    },
+                    _count: {
+                        select: {
+                            comments: true,
+                        },
+                    },
+                },
+            }),
+            prisma.post.count({ where }),
+        ]);
+        return res.status(200).json({
+            message: "Posts retrieved successfully",
+            pagination: {
+                currentPage: page,
+                limit,
+                totalPosts,
+                totalPages: Math.ceil(totalPosts / limit),
+            },
+            posts,
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            message: "Unable to retrieve posts",
+        });
+    }
+};
+// EDIT ANY POST
+export const updateAnyPost = async (req, res) => {
+    try {
+        const id = req.params.id;
+        if (typeof id !== "string") {
+            return res.status(400).json({
+                message: "Invalid comment ID",
+            });
+        }
+        const { title, content } = req.body;
+        if (!id) {
+            return res.status(400).json({
+                message: "Post ID is required",
+            });
+        }
+        if (title === undefined && content === undefined) {
+            return res.status(400).json({
+                message: "Provide a title or content to update",
+            });
+        }
+        if ((title !== undefined &&
+            (typeof title !== "string" || !title.trim())) ||
+            (content !== undefined &&
+                (typeof content !== "string" || !content.trim()))) {
+            return res.status(400).json({
+                message: "Title and content must be non-empty strings",
+            });
+        }
+        const post = await prisma.post.findUnique({
+            where: { id },
+        });
+        if (!post) {
+            return res.status(404).json({
+                message: "Post not found",
+            });
+        }
+        const updatedPost = await prisma.post.update({
+            where: { id },
+            data: {
+                ...(title !== undefined && { title: title.trim() }),
+                ...(content !== undefined && { content: content.trim() }),
+            },
+            include: {
+                author: {
+                    select: {
+                        id: true,
+                        username: true,
+                    },
+                },
+            },
+        });
+        return res.status(200).json({
+            message: "Post updated successfully",
+            post: updatedPost,
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            message: "Unable to update post",
+        });
+    }
+};
+// PUBLISH OR UNPUBLISH ANY POST
+export const toggleAnyPostPublish = async (req, res) => {
+    try {
+        const id = req.params.id;
+        if (typeof id !== "string") {
+            return res.status(400).json({
+                message: "Invalid comment ID",
+            });
+        }
+        const { published } = req.body;
+        if (!id) {
+            return res.status(400).json({
+                message: "Post ID is required",
+            });
+        }
+        if (typeof published !== "boolean") {
+            return res.status(400).json({
+                message: "Published must be true or false",
+            });
+        }
+        const post = await prisma.post.findUnique({
+            where: { id },
+        });
+        if (!post) {
+            return res.status(404).json({
+                message: "Post not found",
+            });
+        }
+        const updatedPost = await prisma.post.update({
+            where: { id },
+            data: { published },
+        });
+        return res.status(200).json({
+            message: published
+                ? "Post published successfully"
+                : "Post unpublished successfully",
+            post: updatedPost,
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            message: "Unable to change post publication status",
+        });
+    }
+};
+// DELETE ANY POST
+export const deleteAnyPost = async (req, res) => {
+    try {
+        const id = req.params.id;
+        if (typeof id !== "string") {
+            return res.status(400).json({
+                message: "Invalid comment ID",
+            });
+        }
+        if (!id) {
+            return res.status(400).json({
+                message: "Post ID is required",
+            });
+        }
+        const post = await prisma.post.findUnique({
+            where: { id },
+        });
+        if (!post) {
+            return res.status(404).json({
+                message: "Post not found",
+            });
+        }
+        await prisma.post.delete({
+            where: { id },
+        });
+        return res.status(200).json({
+            message: "Post deleted successfully",
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            message: "Unable to delete post",
+        });
+    }
+};
+// GET ALL COMMENTS
+export const getAllComments = async (req, res) => {
+    try {
+        const { page, limit, skip } = getPagination(req);
+        const keyword = getKeyword(req);
+        const where = keyword
+            ? {
+                OR: [
+                    { content: { contains: keyword, mode: "insensitive" } },
+                    {
+                        author: {
+                            username: {
+                                contains: keyword,
+                                mode: "insensitive",
+                            },
+                        },
+                    },
+                    {
+                        post: {
+                            title: {
+                                contains: keyword,
+                                mode: "insensitive",
+                            },
+                        },
+                    },
+                ],
+            }
+            : {};
+        const [comments, totalComments] = await Promise.all([
+            prisma.comment.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { createdAt: "desc" },
+                include: {
+                    author: {
+                        select: {
+                            id: true,
+                            username: true,
+                        },
+                    },
+                    post: {
+                        select: {
+                            id: true,
+                            title: true,
+                        },
+                    },
+                },
+            }),
+            prisma.comment.count({ where }),
+        ]);
+        return res.status(200).json({
+            message: "Comments retrieved successfully",
+            pagination: {
+                currentPage: page,
+                limit,
+                totalComments,
+                totalPages: Math.ceil(totalComments / limit),
+            },
+            comments,
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            message: "Unable to retrieve comments",
+        });
+    }
+};
+// DELETE ANY COMMENT
+export const deleteAnyComment = async (req, res) => {
+    try {
+        const id = req.params.id;
+        if (typeof id !== "string") {
+            return res.status(400).json({
+                message: "Invalid comment ID",
+            });
+        }
+        if (!id) {
+            return res.status(400).json({
+                message: "Comment ID is required",
+            });
+        }
+        const comment = await prisma.comment.findUnique({
+            where: { id },
+        });
+        if (!comment) {
+            return res.status(404).json({
+                message: "Comment not found",
+            });
+        }
+        await prisma.comment.delete({
+            where: { id },
+        });
+        return res.status(200).json({
+            message: "Comment deleted successfully",
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            message: "Unable to delete comment",
+        });
+    }
+};
+// GET ADMIN DASHBOARD STATISTICS
+export const getDashboardStats = async (req, res) => {
+    try {
+        const [totalUsers, totalAuthors, totalReaders, totalPosts] = await Promise.all([
+            prisma.user.count(),
+            prisma.user.count({
+                where: { role: "AUTHOR" }
+            }),
+            prisma.user.count({
+                where: { role: "READER" }
+            }),
+            prisma.post.count()
+        ]);
+        return res.status(200).json({
+            message: "Dashboard statistics retrieved successfully",
+            stats: {
+                totalUsers,
+                totalAuthors,
+                totalReaders,
+                totalPosts
+            }
+        });
+    }
+    catch (error) {
+        console.error("Dashboard statistics error:", error);
+        return res.status(500).json({
+            message: "Unable to retrieve dashboard statistics"
+        });
+    }
+};
+//# sourceMappingURL=adminController.js.map
